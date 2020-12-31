@@ -5,13 +5,12 @@ import datetime
 import requests
 from prettytable import PrettyTable
 from dateutil.parser import parse
-import boto3
-from botocore.exceptions import ClientError
 
 
 # URLS
 API_BASE = 'https://fantasy.premierleague.com/api'
 GENERAL_INFO = f'{API_BASE}/bootstrap-static/'
+PREM_MATCHES = f'{API_BASE}/fixtures/'
 H2H_LEAGUE_MATCHES = f'{API_BASE}/leagues-h2h-matches/league/{environ["LEAGUE_ID"]}/'
 H2H_LEAGUE_STANDINGS = f'{API_BASE}/leagues-h2h/{environ["LEAGUE_ID"]}/standings'
 
@@ -27,6 +26,16 @@ def get_current_events():
         if not event['finished']:
             return event, previous_event
         previous_event = event
+
+
+def get_final_gameweek_fixture_date(event_id):
+    """
+    Gets the date of the final fixture of the most recent gameweek.
+    :param event_id: The id of the previously finished gameweek
+    """
+    fixtures = requests.get(PREM_MATCHES).json()
+    fixture_dates = [f['kickoff_time'] for f in fixtures if f['event'] == event_id]
+    return fixture_dates[-1]
 
 
 def get_league_table():
@@ -100,70 +109,28 @@ def report_fixtures(event_id):
               f'{f["entry_2_name"]}')
 
 
-def between_gameweeks(event_id, deadline_time):
+def bot_handler(event, context):
     """
-    State 4: In between gameweeks. Checks deadline against current date.
-    Reports next fixtures if day of the deadline
-    :param event_id:
-    :param deadline_time:
-    """
-    today = datetime.datetime.today()
-    deadline = parse(deadline_time)
-    if deadline.date() == today.date():
-        # New Gameweek Starting
-        print(f'The deadline for the coming fantasy gameweek is today at {deadline.time()}')
-        report_fixtures(event_id)
-
-
-def main():
-    """
-    Possible states
-
-    State 1: Newly launched lambda. No working id.
-        a: If current event, set working id = current event id then consider State 4.
-        b: If no current event, season not in progress. Consider State 2.
-    State 2: No current event. Season not in progress. Exit.
-    State 3: Working id == previous event id. Gameweek is finished. Report results.
-    State 4: Working id == current event id. In between gameweeks. Report fixtures if on day of deadline.
+    Lambda handler function
+    Reports on fixtures or results from a given league depending on the date.
     """
     current_event, previous_event = get_current_events()
-    dynamo_db = boto3.client('dynamodb')
 
-    try:
-        working_id = dynamo_db.get_item(TableName='GameweekIDs', Key='working_id')
-    except ClientError:
-        working_id = None
-
-    if not working_id:
-        # State 1 - Newly deployed lambda
-        if current_event:
-            # a: Season in progress -> State 4
-            dynamo_db.put_item(TableName='GameweekIDs', Item={'working_id': {'N': current_event['id']}})
-            between_gameweeks(current_event['id'], current_event['deadline_time'])
-            return
-        else:
-            # b: Season has finished -> State 2
-            return
-
+    # All events considered 'finished' - Season is not in progress
     if not current_event:
-        # State 2 - Season has just finished
         return
 
-    if working_id == previous_event['id']:
-        # State 3 - Gameweek Finished
-        dynamo_db.put_item(TableName='GameweekIDs', Item={'working_id': {'N': current_event['id']}})
+    current_event_deadline = parse(current_event['deadline_time'])
+    last_match = parse(get_final_gameweek_fixture_date(previous_event['id']))
+    today = datetime.datetime.today()
+    yesterday = today - datetime.timedelta(days=1)
+
+    # If a gameweek finished yesterday
+    if last_match.date() == yesterday.date():
         report_results(previous_event['id'])
         report_table()
-        return
-    elif working_id == current_event['id']:
-        # State 4 - Between gameweeks
-        between_gameweeks(current_event['id'], current_event['deadline_time'])
-        return
-    else:
-        # Unknown state. Debug and exit
-        print(f'Unknown state reached. working_id={working_id}, current_event={current_event["id"]}')
-        return
 
-
-if __name__ == "__main__":
-    main()
+    # If today is the start of a new gameweek
+    if current_event_deadline.date() == today.date():
+        print(f'The deadline for the coming fantasy gameweek is today at {current_event_deadline.time()}')
+        report_fixtures(current_event['id'])
