@@ -52,11 +52,16 @@ def get_current_events():
     """
     events = api_get(GENERAL_INFO)['events']
     previous_event = None
-    for event in events:
-        if not event['finished']:
-            return event, previous_event
-        previous_event = event
 
+    try:
+        for event in events:
+            if not event['finished']:
+                return event, previous_event
+            previous_event = event
+        # All events may be finished, or no events were got...
+        return None, previous_event
+    except TypeError:
+        return None, None
 
 def get_final_gameweek_fixture_date(event_id):
     """
@@ -119,20 +124,24 @@ def bot_handler(event, context):
     """
     current_event, previous_event = get_current_events()
 
-    # All events considered 'finished' - Season is not in progress
-    if not current_event:
+    # No useful gameweeks found
+    if not current_event and not previous_event:
         return
 
-    current_event_deadline = parse(current_event['deadline_time'])
-    last_match = parse(get_final_gameweek_fixture_date(previous_event['id']))
     today = datetime.datetime.today()
     yesterday = today - datetime.timedelta(days=1)
 
-    # If a gameweek finished yesterday
-    if last_match.date() == yesterday.date():
-        report_results(previous_event['id'])
+    # At least one gameweek completed
+    if previous_event:
+        last_match = parse(get_final_gameweek_fixture_date(previous_event['id']))
+        # If a gameweek finished yesterday
+        if last_match.date() == yesterday.date():
+            report_results(previous_event['id'])
 
-    # If today is the start of a new gameweek
-    if current_event_deadline.date() == today.date():
-        send(f'The deadline for the coming fantasy gameweek is today at {current_event_deadline.time()}')
-        report_fixtures(current_event['id'])
+    # At least one gameweek to come/in progress
+    if current_event:
+        current_event_deadline = parse(current_event['deadline_time'])
+        # If today is the start of the gameweek
+        if current_event_deadline.date() == today.date():
+            send(f'The deadline for the coming fantasy gameweek is today at {current_event_deadline.time()}')
+            report_fixtures(current_event['id'])
