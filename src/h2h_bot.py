@@ -2,10 +2,20 @@
 
 from os import environ
 import datetime
+import re
 import requests
 from prettytable import PrettyTable
 from dateutil.parser import parse
+from fbchat import Client
+from fbchat.models import Message, ThreadType
+import fbchat
 
+
+# HACKY STUFF - fbchat is unmaintained and has issues. These lines comes from the repo issue #615
+fbchat._util.USER_AGENTS    = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.75 Safari/537.36"
+]
+fbchat._state.FB_DTSG_REGEX = re.compile(r'"name":"fb_dtsg","value":"(.*?)"')
 
 # URLS
 API_BASE = 'https://fantasy.premierleague.com/api'
@@ -13,6 +23,16 @@ GENERAL_INFO = f'{API_BASE}/bootstrap-static/'
 PREM_MATCHES = f'{API_BASE}/fixtures/'
 H2H_LEAGUE_MATCHES = f'{API_BASE}/leagues-h2h-matches/league/{environ["LEAGUE_ID"]}/'
 H2H_LEAGUE_STANDINGS = f'{API_BASE}/leagues-h2h/{environ["LEAGUE_ID"]}/standings'
+
+fb_client = Client(environ['FB_EMAIL'], environ['FB_PASSWORD'])
+
+
+def send(message):
+    """
+    Uses the facebook client to send a message to the group chat
+    """
+    print("Sending:", message)
+    fb_client.send(Message(text=message), thread_id=environ['THREAD_ID'], thread_type=ThreadType.USER)
 
 
 def get_current_events():
@@ -64,16 +84,16 @@ def report_results(event_id):
     """
     fixtures = get_gameweek_fixtures(event_id)
 
-    print('The results of this weeks fantasy games are here!')
+    send('The results of this weeks fantasy games are here!')
     for f in fixtures:
         total_1 = f'{f["entry_1_player_name"]}\'s {f["entry_1_name"]} ({f["entry_1_points"]} points)'
         total_2 = f'{f["entry_2_player_name"]}\'s {f["entry_2_name"]} ({f["entry_2_points"]} points)'
         if f['entry_1_points'] > f['entry_2_points']:
-            print(f'{total_1} won against {total_2}.')
+            send(f'{total_1} won against {total_2}.')
         elif f['entry_2_points'] > f['entry_1_points']:
-            print(f'{total_2} won against {total_1}.')
+            send(f'{total_2} won against {total_1}.')
         else:
-            print(f'{total_1} drew with {total_2}.')
+            send(f'{total_1} drew with {total_2}.')
 
 
 def report_table():
@@ -81,7 +101,7 @@ def report_table():
     Reports the table for a h2h league as it stands
     """
     league_name, standings = get_league_table()
-    print(league_name + ' table')
+    send(league_name + ' table')
 
     table = PrettyTable(['Rank', 'Team', 'Manager', 'Won', 'Drawn', 'Lost'])
     for team in standings:
@@ -93,7 +113,7 @@ def report_table():
             team['matches_drawn'],
             team['matches_lost']
         ])
-    print(table)
+    send(str(table))
 
 
 def report_fixtures(event_id):
@@ -103,9 +123,9 @@ def report_fixtures(event_id):
     """
     fixtures = get_gameweek_fixtures(event_id)
 
-    print('In this coming gameweek we have some tasty fixtures:')
+    send('In this coming gameweek we have some tasty fixtures:')
     for f in fixtures:
-        print(f'{f["entry_1_player_name"]}\'s {f["entry_1_name"]} play {f["entry_2_player_name"]}\'s '
+        send(f'{f["entry_1_player_name"]}\'s {f["entry_1_name"]} play {f["entry_2_player_name"]}\'s '
               f'{f["entry_2_name"]}')
 
 
@@ -132,5 +152,5 @@ def bot_handler(event, context):
 
     # If today is the start of a new gameweek
     if current_event_deadline.date() == today.date():
-        print(f'The deadline for the coming fantasy gameweek is today at {current_event_deadline.time()}')
+        send(f'The deadline for the coming fantasy gameweek is today at {current_event_deadline.time()}')
         report_fixtures(current_event['id'])
