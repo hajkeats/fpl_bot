@@ -15,6 +15,7 @@ fbchat._state.FB_DTSG_REGEX = re.compile(r'"name":"fb_dtsg","value":"(.*?)"')
 
 # URLS
 BASE = 'https://fantasy.premierleague.com'
+CHANGE_TEAM = f'{BASE}/my-team'
 API_BASE = F'{BASE}/api'
 GENERAL_INFO = f'{API_BASE}/bootstrap-static/'
 PREM_MATCHES = f'{API_BASE}/fixtures/'
@@ -144,4 +145,5 @@ def bot_handler(event, context):
         # If today is the start of the gameweek
         if current_event_deadline.date() == today.date():
             send(f'The deadline for the coming fantasy gameweek is today at {current_event_deadline.time()}')
+            send(f'Change your team here: {CHANGE_TEAM}')
             report_fixtures(current_event['id'])
