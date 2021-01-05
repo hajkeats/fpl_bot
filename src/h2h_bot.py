@@ -25,7 +25,7 @@ GENERAL_INFO = f'{API_BASE}/bootstrap-static/'
 PREM_MATCHES = f'{API_BASE}/fixtures/'
 H2H_LEAGUE_STANDINGS = f'{BASE}/leagues/{environ["LEAGUE_ID"]}/standings/h'
 
-fb_client = fbchat.Client(environ['FB_EMAIL'], environ['FB_PASSWORD'])
+# fb_client = fbchat.Client(environ['FB_EMAIL'], environ['FB_PASSWORD'])
 
 
 def api_get(url):
@@ -46,7 +46,7 @@ def send(message):
     :param message: the message to send
     """
     print("Sending:", message)
-    fb_client.send(Message(text=message), thread_id=environ['THREAD_ID'], thread_type=ThreadType.GROUP)
+    # fb_client.send(Message(text=message), thread_id=environ['THREAD_ID'], thread_type=ThreadType.GROUP)
 
 
 def get_current_events():
@@ -88,8 +88,7 @@ async def get_gameweek_fixtures(event_id):
         fpl = FPL(session)
         await fpl.login(email=environ['FPL_EMAIL'], password=environ['FPL_PASSWORD'])
         h2h_league = await fpl.get_h2h_league(environ['LEAGUE_ID'])
-        fixtures = await h2h_league.get_fixtures(gameweek=event_id)
-    return fixtures
+        return await h2h_league.get_fixtures(gameweek=event_id)
 
 
 def report_results(event_id):
@@ -155,3 +154,6 @@ def bot_handler(event, context):
             send(f'The deadline for the coming fantasy gameweek is today at {current_event_deadline.time()}')
             send(f'Change your team here: {CHANGE_TEAM}')
             report_fixtures(current_event['id'])
+
+if __name__ == '__main__':
+    bot_handler({},{})
