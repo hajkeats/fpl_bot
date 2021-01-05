@@ -25,7 +25,7 @@ GENERAL_INFO = f'{API_BASE}/bootstrap-static/'
 PREM_MATCHES = f'{API_BASE}/fixtures/'
 H2H_LEAGUE_STANDINGS = f'{BASE}/leagues/{environ["LEAGUE_ID"]}/standings/h'
 
-# fb_client = fbchat.Client(environ['FB_EMAIL'], environ['FB_PASSWORD'])
+fb_client = fbchat.Client(environ['FB_EMAIL'], environ['FB_PASSWORD'])
 
 
 def api_get(url):
@@ -46,7 +46,7 @@ def send(message):
     :param message: the message to send
     """
     print("Sending:", message)
-    # fb_client.send(Message(text=message), thread_id=environ['THREAD_ID'], thread_type=ThreadType.GROUP)
+    fb_client.send(Message(text=message), thread_id=environ['THREAD_ID'], thread_type=ThreadType.GROUP)
 
 
 def get_current_events():
