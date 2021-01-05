@@ -12,6 +12,7 @@ Unlike conventional messenger chatbots, this bot requires a regular account rath
 
 ## Setup
 
+> Note: You will need a fantasy premier league account to run this bot...
 
 Create a facebook account for the bot, making note of the email and password.
 
@@ -36,6 +37,7 @@ export AWS_SECRET_ACCESS_KEY="<SECRET KEY>"
 From inside the 'terraform' directory run the following commands to deploy the code:
 
 > Note: enter variable values when prompted - the facebook_email, facebook_password and thread_id values are those you made note of from the setup earlier.
+> You will also need your fantasy premier league details.
 ```
 terraform init
 terraform apply
