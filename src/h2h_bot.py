@@ -7,6 +7,10 @@ import requests
 from dateutil.parser import parse
 from fbchat.models import Message, ThreadType
 import fbchat
+from fpl import FPL
+import aiohttp
+import asyncio
+
 
 # HACKY STUFF - fbchat is unmaintained and has issues. These lines come from the repo issue #615
 fbchat._util.USER_AGENTS = ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_2) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -19,7 +23,6 @@ CHANGE_TEAM = f'{BASE}/my-team'
 API_BASE = F'{BASE}/api'
 GENERAL_INFO = f'{API_BASE}/bootstrap-static/'
 PREM_MATCHES = f'{API_BASE}/fixtures/'
-H2H_LEAGUE_MATCHES = f'{API_BASE}/leagues-h2h-matches/league/{environ["LEAGUE_ID"]}/'
 H2H_LEAGUE_STANDINGS = f'{BASE}/leagues/{environ["LEAGUE_ID"]}/standings/h'
 
 fb_client = fbchat.Client(environ['FB_EMAIL'], environ['FB_PASSWORD'])
@@ -75,14 +78,18 @@ def get_final_gameweek_fixture_date(event_id):
     return fixture_dates[-1]
 
 
-def get_gameweek_fixtures(event_id):
+async def get_gameweek_fixtures(event_id):
     """
     Returns the fixtures for a given league and gameweek
     :param event_id: the identifier for the gameweek to get fixtures for
     :return: fixtures for the gameweek
     """
-    h2h_fixtures = api_get(H2H_LEAGUE_MATCHES)
-    return [f for f in h2h_fixtures['results'] if f['event'] == event_id]
+    async with aiohttp.ClientSession() as session:
+        fpl = FPL(session)
+        await fpl.login(email=environ['FPL_EMAIL'], password=environ['FPL_PASSWORD'])
+        h2h_league = await fpl.get_h2h_league(environ['LEAGUE_ID'])
+        fixtures = await h2h_league.get_fixtures(gameweek=event_id)
+    return fixtures
 
 
 def report_results(event_id):
@@ -90,7 +97,7 @@ def report_results(event_id):
     Reports results for a finished gameweek
     :param event_id: the id for the results
     """
-    fixtures = get_gameweek_fixtures(event_id)
+    fixtures = asyncio.get_event_loop().run_until_complete(get_gameweek_fixtures(event_id))
 
     send('The results of this weeks fantasy games are here!')
     for f in fixtures:
@@ -111,7 +118,7 @@ def report_fixtures(event_id):
     Reports fixtures for an upcoming gameweek
     :param event_id: the id of the coming gameweek
     """
-    fixtures = get_gameweek_fixtures(event_id)
+    fixtures = asyncio.get_event_loop().run_until_complete(get_gameweek_fixtures(event_id))
 
     send('In this coming gameweek we have some tasty fixtures:')
     for f in fixtures:

@@ -12,6 +12,7 @@ codecov==2.1.10
 colorama==0.4.4
 coverage==5.3
 fbchat==1.9.7
+fpl==0.6.25
 idna==2.10
 iniconfig==1.1.1
 isort==5.6.4
