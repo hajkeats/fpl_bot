@@ -43,7 +43,7 @@ def send(message):
     :param message: the message to send
     """
     print("Sending:", message)
-    fb_client.send(Message(text=message), thread_id=environ['THREAD_ID'], thread_type=ThreadType.USER)
+    fb_client.send(Message(text=message), thread_id=environ['THREAD_ID'], thread_type=ThreadType.GROUP)
 
 
 def get_current_events():
@@ -63,6 +63,7 @@ def get_current_events():
         return None, previous_event
     except TypeError:
         return None, None
+
 
 def get_final_gameweek_fixture_date(event_id):
     """
