@@ -154,6 +154,3 @@ def bot_handler(event, context):
             send(f'The deadline for the coming fantasy gameweek is today at {current_event_deadline.time()}')
             send(f'Change your team here: {CHANGE_TEAM}')
             report_fixtures(current_event['id'])
-
-if __name__ == '__main__':
-    bot_handler({},{})
