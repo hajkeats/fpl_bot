@@ -143,14 +143,39 @@ def bot_handler(event, context):
     if previous_event:
         last_match = parse(get_final_gameweek_fixture_date(previous_event['id']))
         # If a gameweek finished yesterday
+        print("Gameweek Last Match: ", last_match.date(), "Yesterday:", yesterday.date())
         if last_match.date() == yesterday.date():
+            print("Reporting Results!")
             report_results(previous_event['id'])
 
     # At least one gameweek to come/in progress
     if current_event:
         current_event_deadline = parse(current_event['deadline_time'])
         # If today is the start of the gameweek
+        print("Gameweek Deadline: ", current_event_deadline.date(), "Today:", today.date())
         if current_event_deadline.date() == today.date():
+            print("Reporting Fixures!")
             send(f'The deadline for the coming fantasy gameweek is today at {current_event_deadline.time()}')
             send(f'Change your team here: {CHANGE_TEAM}')
             report_fixtures(current_event['id'])
+
+
+if __name__ == '__main__':
+    # Used for testing
+    current_event, previous_event = get_current_events()
+    today = datetime.datetime.today()
+    yesterday = today - datetime.timedelta(days=1)
+
+    if previous_event:
+        last_match = parse(get_final_gameweek_fixture_date(previous_event['id']))
+        # If a gameweek finished yesterday
+        print("Gameweek Last Match: ", last_match.date(), "Yesterday:", yesterday.date())
+        if last_match.date() == yesterday.date():
+            print("Should Report Results!")
+
+    if current_event:
+        current_event_deadline = parse(current_event['deadline_time'])
+        # If today is the start of the gameweek
+        print("Gameweek Deadline: ", current_event_deadline.date(), "Today:", today.date())
+        if current_event_deadline.date() == today.date():
+            print("Should Report Fixtures!")
