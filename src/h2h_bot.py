@@ -3,14 +3,10 @@
 from os import environ
 import datetime
 import re
-import requests
 from dateutil.parser import parse
-from fbchat.models import Message, ThreadType
 import fbchat
-from fpl import FPL
-import aiohttp
-import asyncio
-
+from fbchat.models import Message, ThreadType
+from fpl_funcs import get_gameweek_fixtures, get_current_gameweeks, get_final_gameweek_fixture_date
 
 # HACKY STUFF - fbchat is unmaintained and has issues. These lines come from the repo issue #615
 fbchat._util.USER_AGENTS = ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_2) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -18,26 +14,10 @@ fbchat._util.USER_AGENTS = ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_2) App
 fbchat._state.FB_DTSG_REGEX = re.compile(r'"name":"fb_dtsg","value":"(.*?)"')
 
 # URLS
-BASE = 'https://fantasy.premierleague.com'
-CHANGE_TEAM = f'{BASE}/my-team'
-API_BASE = F'{BASE}/api'
-GENERAL_INFO = f'{API_BASE}/bootstrap-static/'
-PREM_MATCHES = f'{API_BASE}/fixtures/'
-H2H_LEAGUE_STANDINGS = f'{BASE}/leagues/{environ["LEAGUE_ID"]}/standings/h'
+CHANGE_TEAM = 'https://fantasy.premierleague.com/my-team'
+H2H_LEAGUE_STANDINGS = f'https://fantasy.premierleague.com/leagues/{environ["LEAGUE_ID"]}/standings/h'
 
 fb_client = fbchat.Client(environ['FB_EMAIL'], environ['FB_PASSWORD'])
-
-
-def api_get(url):
-    """
-    Used to submit get requests to the fantasy API, with some error handling
-    :param url: The url to request data from
-    """
-    json_resp = requests.get(url=url).json()
-    if json_resp == 'The game is being updated.':
-        print(json_resp)
-        exit(0)
-    return json_resp
 
 
 def send(message):
@@ -49,54 +29,12 @@ def send(message):
     fb_client.send(Message(text=message), thread_id=environ['THREAD_ID'], thread_type=ThreadType.GROUP)
 
 
-def get_current_events():
-    """
-    Returns details for both the most recently finished gameweek and the next coming gameweek
-    :return: current_event details, previous_event details
-    """
-    events = api_get(GENERAL_INFO)['events']
-    previous_event = None
-
-    try:
-        for event in events:
-            if not event['finished']:
-                return event, previous_event
-            previous_event = event
-        # All events may be finished, or no events were got...
-        return None, previous_event
-    except TypeError:
-        return None, None
-
-
-def get_final_gameweek_fixture_date(event_id):
-    """
-    Gets the date of the final fixture of the most recent gameweek.
-    :param event_id: The id of the previously finished gameweek
-    """
-    fixtures = api_get(PREM_MATCHES)
-    fixture_dates = [f['kickoff_time'] for f in fixtures if f['event'] == event_id]
-    return fixture_dates[-1]
-
-
-async def get_gameweek_fixtures(event_id):
-    """
-    Returns the fixtures for a given league and gameweek
-    :param event_id: the identifier for the gameweek to get fixtures for
-    :return: fixtures for the gameweek
-    """
-    async with aiohttp.ClientSession() as session:
-        fpl = FPL(session)
-        await fpl.login(email=environ['FPL_EMAIL'], password=environ['FPL_PASSWORD'])
-        h2h_league = await fpl.get_h2h_league(environ['LEAGUE_ID'])
-        return await h2h_league.get_fixtures(gameweek=event_id)
-
-
-def report_results(event_id):
+def report_results(gameweek_id):
     """
     Reports results for a finished gameweek
-    :param event_id: the id for the results
+    :param gameweek_id: the id for the results
     """
-    fixtures = asyncio.get_event_loop().run_until_complete(get_gameweek_fixtures(event_id))
+    fixtures = get_gameweek_fixtures(gameweek_id)
 
     send('The results of this weeks fantasy games are here!')
     for f in fixtures:
@@ -112,12 +50,12 @@ def report_results(event_id):
     send(f'The table has been updated: {H2H_LEAGUE_STANDINGS}')
 
 
-def report_fixtures(event_id):
+def report_fixtures(gameweek_id):
     """
     Reports fixtures for an upcoming gameweek
-    :param event_id: the id of the coming gameweek
+    :param gameweek_id: the id of the coming gameweek
     """
-    fixtures = asyncio.get_event_loop().run_until_complete(get_gameweek_fixtures(event_id))
+    fixtures = get_gameweek_fixtures(gameweek_id)
 
     send('In this coming gameweek we have some tasty fixtures:')
     for f in fixtures:
@@ -130,52 +68,26 @@ def bot_handler(event, context):
     Lambda handler function
     Reports on fixtures or results from a given league depending on the date.
     """
-    current_event, previous_event = get_current_events()
-
-    # No useful gameweeks found
-    if not current_event and not previous_event:
-        return
-
+    current_gameweek, previous_gameweek = get_current_gameweeks()
     today = datetime.datetime.today()
     yesterday = today - datetime.timedelta(days=1)
 
     # At least one gameweek completed
-    if previous_event:
-        last_match = parse(get_final_gameweek_fixture_date(previous_event['id']))
+    if previous_gameweek:
+        last_match = parse(get_final_gameweek_fixture_date(previous_gameweek.id))
         # If a gameweek finished yesterday
         print("Gameweek Last Match: ", last_match.date(), "Yesterday:", yesterday.date())
         if last_match.date() == yesterday.date():
             print("Reporting Results!")
-            report_results(previous_event['id'])
+            report_results(previous_gameweek.id)
 
     # At least one gameweek to come/in progress
-    if current_event:
-        current_event_deadline = parse(current_event['deadline_time'])
+    if current_gameweek:
+        current_gameweek_deadline = parse(current_gameweek.deadline_time)
         # If today is the start of the gameweek
-        print("Gameweek Deadline: ", current_event_deadline.date(), "Today:", today.date())
-        if current_event_deadline.date() == today.date():
-            print("Reporting Fixures!")
-            send(f'The deadline for the coming fantasy gameweek is today at {current_event_deadline.time()}')
+        print("Gameweek Deadline: ", current_gameweek_deadline.date(), "Today:", today.date())
+        if current_gameweek_deadline.date() == today.date():
+            print("Reporting Fixtures!")
+            send(f'The deadline for the coming fantasy gameweek is today at {current_gameweek_deadline.time()}')
             send(f'Change your team here: {CHANGE_TEAM}')
-            report_fixtures(current_event['id'])
-
-
-if __name__ == '__main__':
-    # Used for testing
-    current_event, previous_event = get_current_events()
-    today = datetime.datetime.today()
-    yesterday = today - datetime.timedelta(days=1)
-
-    if previous_event:
-        last_match = parse(get_final_gameweek_fixture_date(previous_event['id']))
-        # If a gameweek finished yesterday
-        print("Gameweek Last Match: ", last_match.date(), "Yesterday:", yesterday.date())
-        if last_match.date() == yesterday.date():
-            print("Should Report Results!")
-
-    if current_event:
-        current_event_deadline = parse(current_event['deadline_time'])
-        # If today is the start of the gameweek
-        print("Gameweek Deadline: ", current_event_deadline.date(), "Today:", today.date())
-        if current_event_deadline.date() == today.date():
-            print("Should Report Fixtures!")
+            report_fixtures(current_gameweek.id)
