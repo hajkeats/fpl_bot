@@ -6,7 +6,7 @@ import re
 from dateutil.parser import parse
 import fbchat
 from fbchat.models import Message, ThreadType
-from fpl_funcs import get_gameweek_fixtures, get_current_gameweeks, get_final_gameweek_fixture_date
+from src.fpl_funcs import get_gameweek_fixtures, get_current_gameweeks, get_final_gameweek_fixture_date
 
 # HACKY STUFF - fbchat is unmaintained and has issues. These lines come from the repo issue #615
 fbchat._util.USER_AGENTS = ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_2) AppleWebKit/537.36 (KHTML, like Gecko) "
