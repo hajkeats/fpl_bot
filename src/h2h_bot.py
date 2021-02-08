@@ -4,6 +4,7 @@ from os import environ
 import datetime
 import re
 from dateutil.parser import parse
+import boto3
 import fbchat
 from fbchat.models import Message, ThreadType
 from src.fpl_funcs import get_gameweek_fixtures, get_current_gameweeks, get_final_gameweek_fixture_date
@@ -17,50 +18,76 @@ fbchat._state.FB_DTSG_REGEX = re.compile(r'"name":"fb_dtsg","value":"(.*?)"')
 CHANGE_TEAM = 'https://fantasy.premierleague.com/my-team'
 H2H_LEAGUE_STANDINGS = f'https://fantasy.premierleague.com/leagues/{environ["LEAGUE_ID"]}/standings/h'
 
-fb_client = fbchat.Client(environ['FB_EMAIL'], environ['FB_PASSWORD'])
+
+def get_previous_session(table):
+    """
+    Returns the previous session from dynamodb table
+    :param table: the table to get session from
+    :return Latest session cookies
+    """
+    resp = table.get_item(Key={'Name': 'session_cookies'})
+    try:
+        return resp['Item']['Session']
+    except KeyError:
+        return None
 
 
-def send(message):
+def store_current_session(table, session):
+    """
+    Stores the session in a dynamodb table
+    :param table: The table in which to store the session
+    :param session: The session cookies for the current session
+    """
+    table.put_item(Item={
+        'Name': 'session_cookies',
+        'Session': session
+    })
+
+
+def send(message, fb):
     """
     Uses the facebook client to send a message to the group chat
     :param message: the message to send
+    :param fb: the client used to send the msg
     """
     print("Sending:", message)
-    fb_client.send(Message(text=message), thread_id=environ['THREAD_ID'], thread_type=ThreadType.GROUP)
+    fb.send(Message(text=message), thread_id=environ['THREAD_ID'], thread_type=ThreadType.GROUP)
 
 
-def report_results(gameweek_id):
+def report_results(gameweek_id, fb):
     """
     Reports results for a finished gameweek
     :param gameweek_id: the id for the results
+    :param fb: the client used to send the msg
     """
     fixtures = get_gameweek_fixtures(gameweek_id)
 
-    send('The results of this weeks fantasy games are here!')
+    send('The results of this weeks fantasy games are here!', fb)
     for f in fixtures:
         total_1 = f'{f["entry_1_player_name"]}\'s {f["entry_1_name"]} ({f["entry_1_points"]} points)'
         total_2 = f'{f["entry_2_player_name"]}\'s {f["entry_2_name"]} ({f["entry_2_points"]} points)'
         if f['entry_1_points'] > f['entry_2_points']:
-            send(f'{total_1} won against {total_2}.')
+            send(f'{total_1} won against {total_2}.', fb)
         elif f['entry_2_points'] > f['entry_1_points']:
-            send(f'{total_2} won against {total_1}.')
+            send(f'{total_2} won against {total_1}.', fb)
         else:
-            send(f'{total_1} drew with {total_2}.')
+            send(f'{total_1} drew with {total_2}.', fb)
 
-    send(f'The table has been updated: {H2H_LEAGUE_STANDINGS}')
+    send(f'The table has been updated: {H2H_LEAGUE_STANDINGS}', fb)
 
 
-def report_fixtures(gameweek_id):
+def report_fixtures(gameweek_id, fb):
     """
     Reports fixtures for an upcoming gameweek
     :param gameweek_id: the id of the coming gameweek
+    :param fb: the client used to send the msg
     """
     fixtures = get_gameweek_fixtures(gameweek_id)
 
-    send('In this coming gameweek we have some tasty fixtures:')
+    send('In this coming gameweek we have some tasty fixtures:', fb)
     for f in fixtures:
         send(f'{f["entry_1_player_name"]}\'s {f["entry_1_name"]} play {f["entry_2_player_name"]}\'s '
-             f'{f["entry_2_name"]}')
+             f'{f["entry_2_name"]}', fb)
 
 
 def bot_handler(event, context):
@@ -68,6 +95,11 @@ def bot_handler(event, context):
     Lambda handler function
     Reports on fixtures or results from a given league depending on the date.
     """
+    table = boto3.resource('dynamodb').Table(environ['DYNAMO_TABLE'])
+    previous_session = get_previous_session(table)
+    fb = fbchat.Client(environ['FB_EMAIL'], environ['FB_PASSWORD'], session_cookies=previous_session)
+    store_current_session(table, fb.getSession())
+
     current_gameweek, previous_gameweek = get_current_gameweeks()
     today = datetime.datetime.today()
     yesterday = today - datetime.timedelta(days=1)
@@ -79,7 +111,7 @@ def bot_handler(event, context):
         print("Gameweek Last Match: ", last_match.date(), "Yesterday:", yesterday.date())
         if last_match.date() == yesterday.date():
             print("Reporting Results!")
-            report_results(previous_gameweek.id)
+            report_results(previous_gameweek.id, fb)
 
     # At least one gameweek to come/in progress
     if current_gameweek:
@@ -88,6 +120,6 @@ def bot_handler(event, context):
         print("Gameweek Deadline: ", current_gameweek_deadline.date(), "Today:", today.date())
         if current_gameweek_deadline.date() == today.date():
             print("Reporting Fixtures!")
-            send(f'The deadline for the coming fantasy gameweek is today at {current_gameweek_deadline.time()}')
-            send(f'Change your team here: {CHANGE_TEAM}')
-            report_fixtures(current_gameweek.id)
+            send(f'The deadline for the coming fantasy gameweek is today at {current_gameweek_deadline.time()}', fb)
+            send(f'Change your team here: {CHANGE_TEAM}', fb)
+            report_fixtures(current_gameweek.id, fb)
