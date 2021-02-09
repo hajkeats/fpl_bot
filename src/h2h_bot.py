@@ -108,18 +108,22 @@ def bot_handler(event, context):
     if previous_gameweek:
         last_match = parse(get_final_gameweek_fixture_date(previous_gameweek.id))
         # If a gameweek finished yesterday
-        print("Gameweek Last Match: ", last_match.date(), "Yesterday:", yesterday.date())
+        print("Previous Gameweek Last Match: ", last_match.date(), "Yesterday:", yesterday.date())
         if last_match.date() == yesterday.date():
-            print("Reporting Results!")
             report_results(previous_gameweek.id, fb)
 
     # At least one gameweek to come/in progress
     if current_gameweek:
         current_gameweek_deadline = parse(current_gameweek.deadline_time)
         # If today is the start of the gameweek
-        print("Gameweek Deadline: ", current_gameweek_deadline.date(), "Today:", today.date())
+        print("Current Gameweek Deadline: ", current_gameweek_deadline.date(), "Today:", today.date())
         if current_gameweek_deadline.date() == today.date():
-            print("Reporting Fixtures!")
             send(f'The deadline for the coming fantasy gameweek is today at {current_gameweek_deadline.time()}', fb)
             send(f'Change your team here: {CHANGE_TEAM}', fb)
             report_fixtures(current_gameweek.id, fb)
+        else:
+            # Its finished but not reported finished
+            last_match = parse(get_final_gameweek_fixture_date(current_gameweek.id))
+            print("Current Gameweek Last Match: ", last_match.date(), "Yesterday:", yesterday.date())
+            if last_match.date() == yesterday.date():
+                report_results(current_gameweek.id, fb)
